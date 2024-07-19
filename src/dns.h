@@ -1039,6 +1039,10 @@ uint16_t dns_question_create_from_name(uint8_t *buffer, dns_name_t *name, dns_re
     aftername = buffer + 12 + name->length;
     *((uint16_t *) aftername) = htons(type);
     *((uint16_t *) (aftername + 2)) = htons(DNS_CLS_IN);
+   
+    // Set the AD flag in query to get also AD flags in responses
+    dns_buf_set_ad(buffer, true);
+    
     return aftername + 4 - buffer;
 }
 
@@ -1059,8 +1063,19 @@ static ssize_t dns_question_create(uint8_t *buffer, char *name, dns_record_type 
     *((uint16_t *) aftername) = htons(type);
     *((uint16_t *) (aftername + 2)) = htons(DNS_CLS_IN);
     *((uint16_t *) (buffer + 4)) = htons(0x0001);
+
+    // Set the AD flag in query to get also AD flags in responses
+    dns_buf_set_ad(buffer, true);
+    
     return aftername + 4 - buffer;
 }
+
+void dns_buf_set_ad(uint8_t *buf, bool value)
+{
+    buf[3] &= 0xDF; // Clear the bit
+    buf[3] |= value << 5; // Set the bit
+}
+
 
 bool dns_send_question(uint8_t *buffer, char *name, dns_record_type type, uint16_t id, int fd, struct sockaddr_storage *addr)
 {
