@@ -1025,6 +1025,12 @@ uint16_t dns_question_size(dns_name_t *name)
     return name->length + 16;
 }
 
+void dns_buf_set_ad(uint8_t *buf, bool value)
+{
+    buf[3] &= 0xDF; // Clear the bit
+    buf[3] |= value << 5; // Set the bit
+}
+
 uint16_t dns_question_create_from_name(uint8_t *buffer, dns_name_t *name, dns_record_type type, uint16_t id)
 {
     static uint8_t *aftername;
@@ -1070,11 +1076,6 @@ static ssize_t dns_question_create(uint8_t *buffer, char *name, dns_record_type 
     return aftername + 4 - buffer;
 }
 
-void dns_buf_set_ad(uint8_t *buf, bool value)
-{
-    buf[3] &= 0xDF; // Clear the bit
-    buf[3] |= value << 5; // Set the bit
-}
 
 
 bool dns_send_question(uint8_t *buffer, char *name, dns_record_type type, uint16_t id, int fd, struct sockaddr_storage *addr)
