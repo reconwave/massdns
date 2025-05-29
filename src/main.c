@@ -40,43 +40,44 @@ void print_help()
 {
     fprintf(stderr, ""
                     "Usage: %s [options] [domainlist]\n"
-                    "  -b  --bindto           Bind to IP address and port. (Default: 0.0.0.0:0)\n"
+                    "  -b  --bindto             Bind to IP address and port. (Default: 0.0.0.0:0)\n"
 #ifdef HAVE_EPOLL
-                    "      --busy-poll        Use busy-wait polling instead of epoll.\n"
+                    "      --busy-poll          Use busy-wait polling instead of epoll.\n"
 #endif
-                    "  -c  --resolve-count    Number of resolves for a name before giving up. (Default: 50)\n"
-                    "      --drop-group       Group to drop privileges to when running as root. (Default: nogroup)\n"
-                    "      --drop-user        User to drop privileges to when running as root. (Default: nobody)\n"
-                    "      --extended-input   Input names are followed by a space-separated list of resolvers.\n"
-                    "                         These are used before falling back to the resolvers file.\n"
-                    "      --filter           Only output packets with the specified response code.\n"
-                    "      --flush            Flush the output file whenever a response was received.\n"
-                    "  -h  --help             Show this help.\n"
-                    "      --ignore           Do not output packets with the specified response code.\n"
-                    "  -i  --interval         Interval in milliseconds to wait between multiple resolves of the same\n"
-                    "                         domain. (Default: 500)\n"
-                    "  -l  --error-log        Error log file path. (Default: /dev/stderr)\n"
-                    "      --norecurse        Use non-recursive queries. Useful for DNS cache snooping.\n"
-                    "  -o  --output           Flags for output formatting.\n"
-                    "      --predictable      Use resolvers incrementally. Useful for resolver tests.\n"
-                    "      --processes        Number of processes to be used for resolving. (Default: 1)\n"
-                    "  -q  --quiet            Quiet mode.\n"
+                    "  -c  --resolve-count      Number of resolves for a name before giving up. (Default: 50)\n"
+                    "      --drop-group         Group to drop privileges to when running as root. (Default: nogroup)\n"
+                    "      --drop-user          User to drop privileges to when running as root. (Default: nobody)\n"
+                    "      --extended-input     Input names are followed by a space-separated list of resolvers.\n"
+                    "                           These are used before falling back to the resolvers file.\n"
+                    "      --filter             Only output packets with the specified response code.\n"
+                    "      --flush              Flush the output file whenever a response was received.\n"
+                    "  -h  --help               Show this help.\n"
+                    "      --ignore             Do not output packets with the specified response code.\n"
+                    "  -i  --interval           Interval in milliseconds to wait between multiple resolves of the same\n"
+                    "                           domain. (Default: 500)\n"
+                    "  -l  --error-log          Error log file path. (Default: /dev/stderr)\n"
+                    "      --norecurse          Use non-recursive queries. Useful for DNS cache snooping.\n"
+                    "  -o  --output             Flags for output formatting.\n"
+                    "      --predictable        Use resolvers incrementally. Useful for resolver tests.\n"
+                    "      --processes          Number of processes to be used for resolving. (Default: 1)\n"
+                    "  -q  --quiet              Quiet mode.\n"
 #ifdef IPV6_HDRINCL
-                    "      --rand-src-ipv6    Use a random IPv6 address from the specified subnet for each query.\n"
+                    "      --rand-src-ipv6      Use a random IPv6 address from the specified subnet for each query.\n"
+                    "      --rand-src-ipv6-file Use a random IPv6 address from the specified file.\n"
 #endif
-                    "      --rcvbuf           Size of the receive buffer in bytes.\n"
-                    "      --retry            Unacceptable DNS response codes.\n"
-                    "                         (Default: All codes but NOERROR or NXDOMAIN)\n"
-                    "  -r  --resolvers        Text file containing DNS resolvers.\n"
-                    "      --root             Do not drop privileges when running as root. Not recommended.\n"
-                    "  -s  --hashmap-size     Number of concurrent lookups. (Default: 10000)\n"
-                    "      --sndbuf           Size of the send buffer in bytes.\n"
-                    "      --status-format    Format for real-time status updates, json or ansi (Default: ansi)\n"
-                    "      --sticky           Do not switch the resolver when retrying.\n"
-                    "      --socket-count     Socket count per process. (Default: 1)\n"
-                    "  -t  --type             Record type to be resolved. (Default: A)\n"
-                    "      --verify-ip        Verify IP addresses of incoming replies.\n"
-                    "  -w  --outfile          Write to the specified output file instead of standard output.\n"
+                    "      --rcvbuf             Size of the receive buffer in bytes.\n"
+                    "      --retry              Unacceptable DNS response codes.\n"
+                    "                           (Default: All codes but NOERROR or NXDOMAIN)\n"
+                    "  -r  --resolvers          Text file containing DNS resolvers.\n"
+                    "      --root               Do not drop privileges when running as root. Not recommended.\n"
+                    "  -s  --hashmap-size       Number of concurrent lookups. (Default: 10000)\n"
+                    "      --sndbuf             Size of the send buffer in bytes.\n"
+                    "      --status-format      Format for real-time status updates, json or ansi (Default: ansi)\n"
+                    "      --sticky             Do not switch the resolver when retrying.\n"
+                    "      --socket-count       Socket count per process. (Default: 1)\n"
+                    "  -t  --type               Record type to be resolved. (Default: A)\n"
+                    "      --verify-ip          Verify IP addresses of incoming replies.\n"
+                    "  -w  --outfile            Write to the specified output file instead of standard output.\n"
                     "\n"
                     "Output flags:\n"
                     "  L - domain list output\n"
@@ -207,8 +208,6 @@ void cleanup()
     free(context.sockets.raw_send4.data);
     free(context.sockets.raw_send6.data);
     free(context.sockets.raw_receive.data);
-
-    urandom_close();
 
     if(context.domainfile)
     {
@@ -867,7 +866,55 @@ void tcp_connected(socket_info_t *socket_info)
 
 #endif
 
-void srcrand_random_addr(struct sockaddr_in6 *addr)
+
+void load_random_addr(char* filename)
+{
+    char ipv6_str[INET6_ADDRSTRLEN];
+    FILE *file;
+    size_t count = 0;
+
+    file = fopen(filename, "r");
+    if (file == NULL)
+    {
+        log_msg(LOG_ERROR, "Failed to open random ipv6 source file: %s\n", filename);
+        clean_exit(EXIT_FAILURE);
+    }
+
+    while (fgets(ipv6_str, sizeof(ipv6_str), file) != NULL)
+    {
+        ipv6_str[strcspn(ipv6_str, "\n")] = 0;
+
+        if (inet_pton(AF_INET6, ipv6_str, &context.srcrand.loaded_v6_address[count].sin6_addr) <= 0)
+        {
+            log_msg(LOG_ERROR, "Ignoring invalid random source IPv6 address: %s\n", ipv6_str);
+            continue;
+        }
+
+        if (count >= MAX_RANDOM_V6_ADDRESSES)
+        {
+            log_msg(LOG_ERROR, "Reached maximum random IPv6 address limit\n");
+            break;
+        }
+
+        context.srcrand.loaded_v6_address[count].sin6_family = AF_INET6;
+        context.srcrand.loaded_v6_address[count].sin6_port = htons(0);
+
+        count++;
+    }
+
+    context.srcrand.available_random_v6_addresses = count;
+
+    fclose(file);
+
+    if (count == 0)
+    {
+        log_msg(LOG_ERROR, "No valid random IPv6 addresses found in file: %s\n", filename);
+        clean_exit(EXIT_FAILURE);
+    }
+}
+
+
+void srcrand_random_addr_from_range(struct sockaddr_in6 *addr)
 {
     memcpy(addr, &context.srcrand.src_range, sizeof(*addr));
     uint8_t prefix = addr->sin6_port;
@@ -880,6 +927,24 @@ void srcrand_random_addr(struct sockaddr_in6 *addr)
         addr->sin6_addr.s6_addr[16 - random_trailing_bytes - 1] ^= (random_byte & ((1 << random_bits) - 1));
     }
     urandom_get(16 - random_trailing_bytes + addr->sin6_addr.s6_addr, random_trailing_bytes);
+}
+
+void srcrand_random_addr_from_file(struct sockaddr_in6 *addr)
+{
+    struct sockaddr_in6 *raddr = &context.srcrand.loaded_v6_address[urandom_size_t_max(context.srcrand.available_random_v6_addresses)];
+    memcpy(addr, raddr, sizeof(*addr));
+}
+
+void srcrand_random_addr(struct sockaddr_in6 *addr)
+{
+    if(context.srcrand.read_from_file)
+    {
+        srcrand_random_addr_from_file(addr);
+    }
+    else
+    {
+        srcrand_random_addr_from_range(addr);
+    }
 }
 
 int tcp_raw_get_fd(lookup_t *lookup)
@@ -984,7 +1049,7 @@ void tcp_connect(lookup_t *lookup)
         {
             struct sockaddr_in6 src_addr;
             srcrand_random_addr(&src_addr);
-            if(bind(tcp_socket, &src_addr, sizeof(src_addr)) != 0)
+            if(bind(tcp_socket, (struct sockaddr*)&src_addr, sizeof(src_addr)) != 0)
             {
                 log_msg(LOG_ERROR, "Failed to bind TCP socket: %s\n", strerror(errno));
             }
@@ -1036,7 +1101,7 @@ void pick_resolver(lookup_t *lookup)
         }
         else
         {
-            lookup->resolver = ((resolver_t *) context.resolvers.data) + urandom_size_t() % context.resolvers.len;
+            lookup->resolver = ((resolver_t *) context.resolvers.data) + urandom_size_t_max(context.resolvers.len);
         }
     }
 }
@@ -1071,7 +1136,7 @@ void send_query(lookup_t *lookup)
     {
         // Pick a random socket from that pool
         // Pool of sockets cannot be empty due to check when parsing resolvers. Socket creation must have succeeded.
-        size_t socket_index = urandom_size_t() % interfaces->len;
+        size_t socket_index = urandom_size_t_max(interfaces->len);
         lookup->socket = ((socket_info_t *) interfaces->data) + socket_index;
     }
 
@@ -2296,7 +2361,7 @@ void run()
         context.domainfile = fopen(context.cmd_args.domains, "r");
         if (context.domainfile == NULL)
         {
-            log_msg(LOG_ERROR, "Failed to open domain file \"%s\".\n", context.cmd_args.domains);
+            log_msg(LOG_ERROR, "Failed to open domain file \"%s\": %s\n", context.cmd_args.domains, strerror(errno));
             clean_exit(EXIT_FAILURE);
         }
     }
@@ -2612,6 +2677,11 @@ void parse_cmd(int argc, char **argv)
         else if (strcmp(argv[i], "--rand-src-ipv6") == 0)
         {
             expect_arg(i);
+            if(context.srcrand.enabled && context.srcrand.read_from_file)
+            {
+                log_msg(LOG_ERROR, "--rand-src-ipv6 cannot be used with --rand-src-ipv6-file\n");
+                clean_exit(EXIT_FAILURE);
+            }
             if(context.srcrand.enabled)
             {
                 log_msg(LOG_ERROR, "--rand-src-ipv6 can only be used once\n");
@@ -2640,6 +2710,25 @@ void parse_cmd(int argc, char **argv)
             // We abuse the port field to hold the prefix length.
             addr->sin6_port = prefix;
             addr->sin6_family = AF_INET6;
+        }
+        else if (strcmp(argv[i], "--rand-src-ipv6-file") == 0)
+        {
+            expect_arg(i);
+            if(context.srcrand.enabled && context.srcrand.read_from_file)
+            {
+                log_msg(LOG_ERROR, "--rand-src-ipv6-file can only be used once\n");
+                clean_exit(EXIT_FAILURE);
+            }
+            if(context.srcrand.enabled)
+            {
+                log_msg(LOG_ERROR, "--rand-src-ipv6-file cannot be used with --rand-src-ipv6\n");
+                clean_exit(EXIT_FAILURE);
+            }
+            char *rand_ipv6_addr_file_name = argv[++i];
+
+            context.srcrand.enabled = true;
+            context.srcrand.read_from_file = true;
+            load_random_addr(rand_ipv6_addr_file_name);
         }
 #endif
         else if (strcmp(argv[i], "--outfile") == 0 || strcmp(argv[i], "-w") == 0)
@@ -2914,7 +3003,7 @@ void parse_cmd(int argc, char **argv)
                     context.domainfile = fopen(context.cmd_args.domains, "r");
                     if (context.domainfile == NULL)
                     {
-                        log_msg(LOG_ERROR, "Failed to open domain file \"%s\".\n", argv[i]);
+                        log_msg(LOG_ERROR, "Failed to open domain file \"%s\": %s.\n", argv[i], strerror(errno));
                         clean_exit(EXIT_FAILURE);
                     }
                     if(fseek(context.domainfile, 0, SEEK_END) != 0)
